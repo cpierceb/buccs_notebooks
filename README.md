@@ -25,8 +25,16 @@ xgboost
 
 ## Data
 
-Station observations combine ERA5/Copernicus-derived predictors with in-situ
-measurements. [Describe where data lives / how to obtain it — or note if not redistributable.]
+Station observations come from:
+sources
+sources
+sources
+
+Raster data from
+
+ 
+Met data from
+
 
 ## Citation
 
@@ -37,7 +45,8 @@ If you use this code, please cite it via the "Cite this repository" button
 
 Released under the MIT License — see [LICENSE](LICENSE).
 
-## Author
+## Authors
 
-Charlie [SURNAME], University of Bern — Institute of Geography / Oeschger Centre
-for Climate Change Research.
+Charles Pierce, University of Bern 
+Sara Top, University of Ghent / KMI
+...
