@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this codebase, please cite it using these metadata."
+title: "BUCCS Notebooks: ML urban temperature modeling"
+abstract: "Machine-learning fundamentals on how to handle urban temperature measurement network data, from data processing to training models, developed for the Bochum Urban Climate Summer School (2026)."
+authors:
+  - family-names: "Pierce"
+    given-names: "Charles"
+    affiliation: "University of Bern, Institute of Geography / Oeschger Centre for Climate Change Research"
+    orcid: "https://orcid.org/0009-0006-4435-2528"
+  - family-names: "Top"
+    given-names: "Sara"
+    affiliation: ""
+    # orcid: "https://orcid.org/0000-0000-0000-0000"  
+version: "0.1.0"
+date-released: "2026-08-05"
+license: MIT
+url: "https://github.com/cpierceb/buccs_notebooks"
