@@ -1,0 +1,5 @@
+cd ~/buccs_notebooks
+echo "data/" >> .gitignore
+git rm -r --cached data          # untrack, but KEEP files on disk
+git add .gitignore
+git commit -m "Stop tracking data directory"
