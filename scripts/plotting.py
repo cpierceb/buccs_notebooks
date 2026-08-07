@@ -1,10 +1,12 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+from matplotlib.colors import ListedColormap, Normalize
 import contextily as ctx
 import numpy as np
 from pyproj import Transformer
 import cmcrameri.cm as cmc
+import rasterio
 
 
 
@@ -74,3 +76,56 @@ def week_plot(hot_week, cold_week, hot_id, cold_id):
     fig.autofmt_xdate()      
     plt.show()
     return fig, ax
+
+
+def quick_raster_plot(city: str, raster_type: str):
+    if raster_type == "lcz":
+        res = 100
+    elif raster_type == "terrain":
+        res = 30
+    else:
+        res = 10
+
+    src = rasterio.open(f"../data/raster/{raster_type}/{city}_{res}.tif")
+    band = src.read(1)
+
+    if raster_type == "lcz":
+        lcz_colors = {
+            1: "#8c0000",   # LCZ 1
+            2: "#d10000",   # LCZ 2
+            3: "#ff0000",   # LCZ 3
+            4: "#bf4d00",   # LCZ 4
+            5: "#ff6600",   # LCZ 5
+            6: "#ff9955",   # LCZ 6
+            7: "#faee05",   # LCZ 7
+            8: "#bcbcbc",   # LCZ 8
+            9: "#ffccaa",   # LCZ 9
+            10: "#555555",  # LCZ 10
+            11: "#006a00",  # LCZ A
+            12: "#00aa00",  # LCZ B
+            13: "#648525",  # LCZ C
+            14: "#b9db79",  # LCZ D
+            15: "#000000",  # LCZ E
+            16: "#fbf7ae",  # LCZ F
+            17: "#6a6aff",  # LCZ G (water)
+        }
+        cmap = ListedColormap(lcz_colors.values())
+
+    elif raster_type == "buildings":
+        # mask knows which data has the noData value
+        mask = src.read_masks(1)
+        # so we set the noData value to 0 because there are no buildings there
+        band[mask==0] = 0
+        cmap = cmc.grayC_r
+
+    elif raster_type == "terrain":
+        cmap = ListedColormap(cmc.bukavu(np.linspace(0.5, 1.0, 256)))
+
+    elif raster_type == "tcd":
+        cmap = ListedColormap(cmc.bam(np.linspace(0.5, 1.0, 256)))
+
+    norm = Normalize(vmin=np.nanmin(band), vmax=np.nanmax(band))
+    # plt.imshow(band, cmap=lcm, norm=norm)
+    plt.imshow(band, cmap=cmap, norm=norm if raster_type in ("terrain", "tcd") else None)
+    plt.colorbar()
+    plt.show()
