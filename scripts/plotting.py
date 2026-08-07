@@ -81,12 +81,12 @@ def week_plot(hot_week, cold_week, hot_id, cold_id):
 def quick_raster_plot(city: str, raster_type: str):
     if raster_type == "lcz":
         res = 100
-    elif raster_type == "terrain":
+    elif raster_type == "dtm":
         res = 30
     else:
         res = 10
 
-    src = rasterio.open(f"../data/raster/{raster_type}/{city}_{res}.tif")
+    src = rasterio.open(f"../data/{raster_type}/{city}_{res}.tif")
     band = src.read(1)
 
     if raster_type == "lcz":
@@ -111,14 +111,14 @@ def quick_raster_plot(city: str, raster_type: str):
         }
         cmap = ListedColormap(lcz_colors.values())
 
-    elif raster_type == "buildings":
+    elif raster_type == "bh":
         # mask knows which data has the noData value
         mask = src.read_masks(1)
         # so we set the noData value to 0 because there are no buildings there
         band[mask==0] = 0
         cmap = cmc.grayC_r
 
-    elif raster_type == "terrain":
+    elif raster_type == "dtm":
         cmap = ListedColormap(cmc.bukavu(np.linspace(0.5, 1.0, 256)))
 
     elif raster_type == "tcd":
@@ -126,6 +126,6 @@ def quick_raster_plot(city: str, raster_type: str):
 
     norm = Normalize(vmin=np.nanmin(band), vmax=np.nanmax(band))
     # plt.imshow(band, cmap=lcm, norm=norm)
-    plt.imshow(band, cmap=cmap, norm=norm if raster_type in ("terrain", "tcd") else None)
+    plt.imshow(band, cmap=cmap, norm=norm if raster_type in ("dtm", "tcd") else None)
     plt.colorbar()
     plt.show()
