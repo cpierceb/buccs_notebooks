@@ -91,4 +91,4 @@ def train_model(X_train, X_val, y_train, y_val, model_type):
 
         y_pred = model.predict(dval)
 
-        return y_pred
+        return y_pred, model
