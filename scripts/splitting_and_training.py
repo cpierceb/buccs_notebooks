@@ -4,7 +4,7 @@ import numpy as np
 
 
 
-def split_data(X, y, mode="random"):
+def split_data(X, y, mode = "random", quadrant = "ne"):
     if mode == "random":
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.3, random_state=42)
         return X_train, X_val, y_train, y_val
@@ -38,13 +38,17 @@ def split_data(X, y, mode="random"):
         cutoff_lat = np.mean([min_lat, max_lat])
         cutoff_lon = np.mean([min_lon, max_lon])
 
-        ne_mask = (X["latitude"] >= cutoff_lat) & (X["longitude"] >= cutoff_lon)
-        # se_mask = X["latitude"] < cutoff_lat and X["longitude"] >= cutoff_lon
-        # nw_mask = X["latitude"] >= cutoff_lat and X["longitude"] < cutoff_lon
-        # sw_mask = X["latitude"] < cutoff_lat and X["longitude"] < cutoff_lon
+        masks = {
+            "ne" : (X["latitude"] >= cutoff_lat) & (X["longitude"] >= cutoff_lon),
+            "se" : (X["latitude"] < cutoff_lat) & (X["longitude"] >= cutoff_lon),
+            "nw" : (X["latitude"] >= cutoff_lat) & (X["longitude"] < cutoff_lon),
+            "sw" : (X["latitude"] < cutoff_lat) & (X["longitude"] < cutoff_lon)
+        }
 
-        X_train, X_val = X[~ne_mask], X[ne_mask]
-        y_train, y_val = y[~ne_mask], y[ne_mask]
+        val_mask = masks[quadrant] 
+
+        X_train, X_val = X[~val_mask], X[val_mask]
+        y_train, y_val = y[~val_mask], y[val_mask]
 
         X_train = X_train.drop(columns=["station_id"]).copy()
         X_val = X_val.drop(columns=["station_id"]).copy()
