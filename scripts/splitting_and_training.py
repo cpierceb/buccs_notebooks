@@ -2,8 +2,12 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import statsmodels.api as sm
+from sklearn.metrics import r2_score, mean_squared_error
 
-
+# ---------------------------------------------------------------------------------------------#
+# ---------------------------------------- SPLITTING ------------------------------------------#
+# ---------------------------------------------------------------------------------------------#
 
 def split_data(X, y, mode = "random", quadrant = "ne"):
     
@@ -59,6 +63,68 @@ def split_data(X, y, mode = "random", quadrant = "ne"):
         return X_train, X_val, y_train, y_val
 
 
+# ---------------------------------------------------------------------------------------------#
+# ------------------------------------- FEATURE SELECTION -------------------------------------#
+# ---------------------------------------------------------------------------------------------#
+
+def feature_selection(model_type, X_tr, y_tr=None, X_val=None, y_val=None,
+                      threshold=0.0):
+    if model_type == "xgboost":
+        drop_cols = ["air_temperature", "temp_diff", "lcz_nearest",
+                     "datetime_utc", "station_id",
+                     "u10", "v10", "ssrd", "tp", "d2m", "t2m"]
+        keep = [c for c in X_tr.columns if c not in drop_cols]
+        print(keep)
+        return keep                                    # list of feature names
+
+    elif model_type == "lur":
+        sel, r2 = select_forward_free(X_tr, y_tr, X_val, y_val, threshold=threshold)
+        print(f"LUR: {len(sel)} predictors, recon_val_R²={r2:.4f}")
+        return sel                                     # list of feature names
+
+
+def val_r2_recon(X_tr, y_tr, X_val, y_val, cols):
+    """Fit on train (residual target), predict val, reconstruct absolute temp, R² on that."""
+    if not cols:
+        return -np.inf
+    model = sm.OLS(y_tr, sm.add_constant(X_tr[cols])).fit()
+    pred_resid = model.predict(sm.add_constant(X_val[cols], has_constant="add"))
+    obs_abs  = y_val.values + X_val["t2m_corr"].values
+    pred_abs = pred_resid.values + X_val["t2m_corr"].values
+    return r2_score(obs_abs, pred_abs)
+
+
+def select_forward_free(X_tr, y_tr, X_val, y_val, threshold=0.0):
+    """Unrestricted forward selection: add the single best predictor each round."""
+    exclude = {"station_id", "datetime_utc", "air_temperature", "temp_diff", "lcz_nearest"}
+    remaining = [c for c in X_tr.columns
+                 if c not in exclude and not c.startswith("LCZ_")]
+    selected = []
+
+    score = lambda cols: val_r2_recon(X_tr, y_tr, X_val, y_val, cols)
+    current = score(selected)
+
+    while remaining:
+        best_pred, best_s = None, current
+        for cand in remaining:
+            s = score(selected + [cand])
+            if s > best_s:
+                best_pred, best_s = cand, s
+        if best_pred is None or (best_s - current) < threshold:
+            break
+        selected.append(best_pred)
+        remaining.remove(best_pred)
+        current = best_s
+        print(f"added {best_pred:20s} recon_val_R²={best_s:.4f}")
+
+    return selected, current
+
+
+
+# ---------------------------------------------------------------------------------------------#
+# ----------------------------------------- TRAINING ------------------------------------------#
+# ---------------------------------------------------------------------------------------------#
+
 def train_model(X_train, X_val, y_train, y_val, model_type):
     if model_type == "xgboost":
         # params = {
@@ -92,4 +158,16 @@ def train_model(X_train, X_val, y_train, y_val, model_type):
 
         y_pred = model.predict(dval)
 
+        return y_pred, model
+    
+
+    elif model_type == "lur":
+        X_tr_c  = sm.add_constant(X_train)
+        X_val_c = sm.add_constant(X_val, has_constant="add")
+
+        model = sm.OLS(y_train, X_tr_c).fit()
+        y_pred = model.predict(X_val_c)
+
+        print(model.params.sort_values(key=abs, ascending=False))
+        
         return y_pred, model
