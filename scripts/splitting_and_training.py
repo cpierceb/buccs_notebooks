@@ -58,6 +58,7 @@ def split_data(X, y, mode = "random", quadrant = "ne"):
 
         return X_train, X_val, y_train, y_val
 
+
 def train_model(X_train, X_val, y_train, y_val, model_type):
     if model_type == "xgboost":
         # params = {
