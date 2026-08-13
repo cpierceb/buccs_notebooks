@@ -133,7 +133,7 @@ def select_forward_free(X_tr, y_tr, X_val, y_val, target, threshold=0.0000):
     """Unrestricted forward selection: add the single best predictor each round."""
 
     # we exclude columns that can't act as predictor variables, i.e. the targets, LCZs (categories) etc..
-    exclude = {"station_id", "datetime_utc", "air_temperature", "temp_diff", "lcz_nearest"}
+    exclude = {"station_id", "datetime_utc", "air_temperature", "temp_diff", "lcz_nearest", "t2m"}
     remaining = [c for c in X_tr.columns
                  if c not in exclude and not c.startswith("LCZ_")]
 
