@@ -188,7 +188,7 @@ def coarsen_raster(src_path, dst_path, target_res):
 
 
 # we prepare a helper function that can extract the geospatial data at different buffer radii
-def sample_point_and_buffers(band, transform, res, x, y,
+def sample_point_and_buffers(name, band, transform, res, x, y,
                              radii=(50, 100, 250, 500, 750, 1000)):
     """band: 2D array with nodata ALREADY filled to 0. Returns dict of predictors."""
 
@@ -200,8 +200,13 @@ def sample_point_and_buffers(band, transform, res, x, y,
     if 0 <= row < band.shape[0] and 0 <= col < band.shape[1]:
         out["nearest"] = band[row, col]
     else:
-        print("out of bounds")
-        out["nearest"] = np.nan
+        print(f"a station in {name} is out of bounds")
+        if name == "bh":
+            out["nearest"] = 0.0
+            for radius in radii:
+                out[f"buf_{radius}"] = 0.0
+        else:
+            out["nearest"] = np.nan
 
     if not radii:                 # nearest-only: skip all the window/buffer work
         return out
@@ -231,7 +236,13 @@ def sample_point_and_buffers(band, transform, res, x, y,
         # this effectively creates a pixelated circle around the station
         vals = window[dist <= radius]
         # we return a column to the dataframe named after the buffer radius containing the mean of the values within the buffer
-        out[f"buf_{radius}"] = np.mean(vals) if vals.size else np.nan
+        if vals.size: 
+            out[f"buf_{radius}"] = np.mean(vals)  
+        else:
+            if name == "bh":
+                out[f"buf_{radius}"] = 0.0
+            else:
+                out[f"buf_{radius}"] = np.nan
 
     return out
 
@@ -264,6 +275,7 @@ def build_station_predictors(df, raster_paths, radii=(50, 100, 250, 500, 750, 10
 
             # we now call our helper function, which takes the following arguments:
             s = sample_point_and_buffers(
+                name,
                 band,                               # band contains the data
                 transform,                          # transform contains the pixel-geospatial transformation info,                        
                 res,                                # which we need to go to/from pixel-geospatial coordinates referencing
