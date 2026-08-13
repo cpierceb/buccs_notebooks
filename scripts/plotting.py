@@ -45,6 +45,24 @@ def obs_map(data: pd.DataFrame, value_col: str):
         cbar = fig.colorbar(sc, ax=ax, shrink=0.7, pad=0.02)
         cbar.set_label("Mean UHI (°C)")
 
+    elif value_col == "rmse":
+        # shared color scale so square (train) and circle (val) colors are comparable
+        vmin, vmax = stn["rmse"].min(), stn["rmse"].max()
+
+        train = stn[stn["split"] == "train"]
+        val   = stn[stn["split"] == "val"]
+
+        sc = ax.scatter(train["x"], train["y"], c=train["rmse"], cmap=cmc.batlow,
+                        vmin=vmin, vmax=vmax, marker="s", s=55,
+                        edgecolors="black", linewidths=0.4, label="train")
+        ax.scatter(val["x"], val["y"], c=val["rmse"], cmap=cmc.batlow,
+                   vmin=vmin, vmax=vmax, marker="o", s=55,
+                   edgecolors="black", linewidths=0.4, label="val")
+
+        cbar = fig.colorbar(sc, ax=ax, shrink=0.7, pad=0.02)
+        cbar.set_label("Station RMSE (°C)")
+        ax.legend(loc="upper right")
+
     # add a basemap to situate ourselves
     ctx.add_basemap(ax, crs="EPSG:3035",
                     source=ctx.providers.CartoDB.Positron)

@@ -9,7 +9,7 @@ from sklearn.metrics import r2_score, mean_squared_error
 # ---------------------------------------- SPLITTING ------------------------------------------#
 # ---------------------------------------------------------------------------------------------#
 
-def split_data(X, y, mode = "random", quadrant = "ne"):
+def split_data(X, y, mode = "random", quadrant = "sw"):
     
     if mode == "random":
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.3, random_state=42)
@@ -67,8 +67,7 @@ def split_data(X, y, mode = "random", quadrant = "ne"):
 # ------------------------------------- FEATURE SELECTION -------------------------------------#
 # ---------------------------------------------------------------------------------------------#
 
-def feature_selection(model_type, X_tr, y_tr=None, X_val=None, y_val=None,
-                      threshold=0.0):
+def feature_selection(model_type, X_tr, y_tr=None, X_val=None, y_val=None):
     if model_type == "xgboost":
         drop_cols = ["air_temperature", "temp_diff", "lcz_nearest",
                      "datetime_utc", "station_id",
@@ -78,7 +77,7 @@ def feature_selection(model_type, X_tr, y_tr=None, X_val=None, y_val=None,
         return keep                                    # list of feature names
 
     elif model_type == "lur":
-        sel, r2 = select_forward_free(X_tr, y_tr, X_val, y_val, threshold=threshold)
+        sel, r2 = select_forward_free(X_tr, y_tr, X_val, y_val)
         print(f"LUR: {len(sel)} predictors, recon_val_R²={r2:.4f}")
         return sel                                     # list of feature names
 
@@ -94,7 +93,7 @@ def val_r2_recon(X_tr, y_tr, X_val, y_val, cols):
     return r2_score(obs_abs, pred_abs)
 
 
-def select_forward_free(X_tr, y_tr, X_val, y_val, threshold=0.0):
+def select_forward_free(X_tr, y_tr, X_val, y_val, threshold=0.0000):
     """Unrestricted forward selection: add the single best predictor each round."""
     exclude = {"station_id", "datetime_utc", "air_temperature", "temp_diff", "lcz_nearest"}
     remaining = [c for c in X_tr.columns
