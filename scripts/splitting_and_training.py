@@ -9,7 +9,7 @@ from sklearn.metrics import r2_score, mean_squared_error
 # ---------------------------------------- SPLITTING ------------------------------------------#
 # ---------------------------------------------------------------------------------------------#
 
-def split_data(X, y, mode = "random", quadrant = "sw"):
+def split_data(X, y, mode = "random", quadrant = "se", spatio_temporal = False):
     
     if mode == "random":
         # random train_test_split from sklearn
@@ -65,14 +65,26 @@ def split_data(X, y, mode = "random", quadrant = "sw"):
             "sw" : (X["latitude"] < cutoff_lat) & (X["longitude"] < cutoff_lon)
         }
 
+        t_min = X["datetime_utc"].min()
+        t_max = X["datetime_utc"].max()
+        cutoff = t_min + 0.75 * (t_max - t_min)
+
+        train_times = X["datetime_utc"] < cutoff
+        val_times = X["datetime_utc"] >= cutoff
+
+        if spatio_temporal:
+            print(f"training from {t_min} to {cutoff}")
+            print(f"validation from {cutoff} to {t_max}")
+
         # the quadrant is "sw" as a default, so all stations in the sw quadrant will be left out of training
         # boolean mask for all validation stations
-        val_mask = masks[quadrant] 
+        val_mask = masks[quadrant] & val_times if spatio_temporal else masks[quadrant]
+        train_mask = ~masks[quadrant] & train_times if spatio_temporal else ~masks[quadrant]
 
         # filter out the validation stations = training set
         # leave the validation stations in = validation set
-        X_train, X_val = X[~val_mask], X[val_mask]
-        y_train, y_val = y[~val_mask], y[val_mask]
+        X_train, X_val = X[train_mask], X[val_mask]
+        y_train, y_val = y[train_mask], y[val_mask]
 
         X_train = X_train.drop(columns=["station_id"]).copy()
         X_val = X_val.drop(columns=["station_id"]).copy()
@@ -92,7 +104,9 @@ def feature_selection(model_type, X_tr, y_tr, X_val, y_val, target):
         #(scalar windspeed, deaccumulated variables, corrected t2m, RH instead of d2m)
         drop_cols = ["air_temperature", "temp_diff", "lcz_nearest",
                      "datetime_utc", "station_id",
-                     "u10", "v10", "ssrd", "tp", "d2m", "t2m"]
+                     "u10", "v10", "ssrd", "tp", "d2m", "t2m",
+                     "tod_cos", "tod_sin", "doy_cos", "doy_sin",
+                     "latitude", "longitude"]
         keep = [c for c in X_tr.columns if c not in drop_cols]
         print(keep)
         # whatever columns are left = our features = predictor variables
@@ -100,12 +114,12 @@ def feature_selection(model_type, X_tr, y_tr, X_val, y_val, target):
 
     # LUR is more sensitive to the predictors, their colinearities etc., hence it's a bit more complex...
     elif model_type == "lur":
-        sel, r2 = select_forward_free(X_tr, y_tr, X_val, y_val, target)
+        sel, r2 = select_predictors(X_tr, y_tr, X_val, y_val, target)
         print(f"LUR: {len(sel)} predictors, recon_val_R²={r2:.4f}")
         return sel                                     # list of feature names
 
 
-def val_r2_recon(X_tr, y_tr, X_val, y_val, target, cols):
+def val_r2_recon(X_tr, y_tr, X_val, y_val, target, cols, r2_resid = False):
     """Fit on train (residual target), predict val, reconstruct absolute temp, R² on that."""
     if not cols:
         return -np.inf
@@ -126,24 +140,77 @@ def val_r2_recon(X_tr, y_tr, X_val, y_val, target, cols):
     # the predicted values are from pred_resid (+ t2m_corr if we are using the residuals as our target)
     pred_abs = pred_resid.values + add_back
 
+    if target == "temp_diff":
+        if r2_resid:
+            return r2_score(y_val.values, pred_resid.values)
+
     return r2_score(obs_abs, pred_abs)
 
 
-def select_forward_free(X_tr, y_tr, X_val, y_val, target, threshold=0.0000):
-    """Unrestricted forward selection: add the single best predictor each round."""
 
+def select_predictors(X_tr, y_tr, X_val, y_val, target, mode="grouped", threshold=0.0):
+    """
+    mode='free'    : unrestricted forward selection (every predictor standalone-or-not).
+    mode='grouped' : pairs (with empty option), geo families pick-one-best, then free
+                     forward on any leftover predictors.
+    """
     # we exclude columns that can't act as predictor variables, i.e. the targets, LCZs (categories) etc..
-    exclude = {"station_id", "datetime_utc", "air_temperature", "temp_diff", "lcz_nearest", "t2m"}
-    remaining = [c for c in X_tr.columns
-                 if c not in exclude and not c.startswith("LCZ_")]
+    exclude = {"station_id", "datetime_utc", "air_temperature", "temp_diff",
+               "lcz_nearest", "latitude", "longitude",
+               "tod_cos", "tod_sin", "doy_cos", "doy_sin"}
+    def is_candidate(c):
+        return c not in exclude and not c.startswith("LCZ_")
 
     # we initialize the selected predictors as an empty list
     selected = []
+    score = lambda cols: val_r2_recon(X_tr, y_tr, X_val, y_val, target, cols, r2_resid = False)
 
-    score = lambda cols: val_r2_recon(X_tr, y_tr, X_val, y_val, target, cols)
-    current = score(selected)
+    def try_group(options):
+        """options: list of column-lists (each an alternative; [] = pick nothing).
+           Keep the best alternative if it beats current by >= threshold."""
+        current = score(selected)
+        best_opt, best_s = None, current
+        for opt in options:
+            if opt and not all(c in X_tr.columns for c in opt):
+                continue
+            s = score(selected + opt)
+            if s > best_s and (s - current) >= threshold:
+                best_opt, best_s = opt, s
+        if best_opt:
+            selected.extend(best_opt)
+            print(f"added {str(best_opt):30s} recon_val_R²={best_s:.4f}")
 
+    used = set()
+
+    if mode == "grouped":
+        # --- pairs / met groups, each with an empty ([]) option ---
+        groups = [
+            [["tod_sin", "tod_cos"], []],
+            [["doy_sin", "doy_cos"], []],
+            [["t2m"], ["t2m_corr"], []],
+            [["d2m"], ["rh"], []],
+            [["u10", "v10"], ["wspd"], []],
+        ]
+        for opts in groups:
+            try_group(opts)
+            for opt in opts:
+                used.update(opt)
+
+        # --- geo families: nearest / each buf / nothing -> pick best ---
+        fams = {}
+        for c in X_tr.columns:
+            if is_candidate(c) and any(c.startswith(p) for p in ("imp", "bh", "tcd")):
+                fams.setdefault(c.split("_")[0], []).append(c)
+        for members in fams.values():
+            options = [[m] for m in members] + [[]]      # each member, or nothing
+            try_group(options)
+            used.update(members)
+
+    # --- free forward on everything not already handled ---
+    remaining = [c for c in X_tr.columns
+                 if is_candidate(c) and c not in used and c not in selected]
     while remaining:
+        current = score(selected)
         best_pred, best_s = None, current
         # we run individual models with 1 additional column each
         # the first run runs a linear regression for every predictor,
@@ -158,10 +225,11 @@ def select_forward_free(X_tr, y_tr, X_val, y_val, target, threshold=0.0000):
             break
         selected.append(best_pred)
         remaining.remove(best_pred)
-        current = best_s
         print(f"added {best_pred:20s} recon_val_R²={best_s:.4f}")
 
-    return selected, current
+    return selected, score(selected)
+
+
 
 
 
